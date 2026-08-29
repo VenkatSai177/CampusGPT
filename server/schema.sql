@@ -1,5 +1,5 @@
 -- CampusGPT Supabase PostgreSQL Database Schema
--- Run this script in your Supabase SQL Editor to set up the database.
+-- Run this script in your Supabase SQL Editor to set up the database and vector search functions.
 
 -- 1. Enable Vector Extension (for Phase 3+ vector search)
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Index on email for fast authentication lookup
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- 3. Documents Table (For Phase 2+)
+-- 3. Documents Table
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. Document Chunks Table with 768-dim Embeddings (For Phase 3+)
+-- 4. Document Chunks Table with 768-dim Embeddings
 CREATE TABLE IF NOT EXISTS document_chunks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -49,7 +49,42 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding
 ON document_chunks 
 USING hnsw (embedding vector_cosine_ops);
 
--- 5. Conversations Table (For Phase 5+)
+-- 5. Supabase pgvector Cosine Similarity Match RPC Function
+CREATE OR REPLACE FUNCTION match_document_chunks(
+    query_embedding VECTOR(768),
+    match_count INT DEFAULT 4,
+    similarity_threshold FLOAT DEFAULT 0.65
+)
+RETURNS TABLE (
+    id UUID,
+    document_id UUID,
+    chunk_index INT,
+    page_number INT,
+    content TEXT,
+    metadata JSONB,
+    similarity FLOAT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        dc.id,
+        dc.document_id,
+        dc.chunk_index,
+        dc.page_number,
+        dc.content,
+        dc.metadata,
+        (1 - (dc.embedding <=> query_embedding)) AS similarity
+    FROM document_chunks dc
+    WHERE dc.embedding IS NOT NULL
+      AND (1 - (dc.embedding <=> query_embedding)) >= similarity_threshold
+    ORDER BY (dc.embedding <=> query_embedding) ASC
+    LIMIT match_count;
+END;
+$$;
+
+-- 6. Conversations Table (For Phase 5+)
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -58,7 +93,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 6. Messages Table (For Phase 5+)
+-- 7. Messages Table (For Phase 5+)
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

@@ -8,9 +8,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "tsx src/tests/auth.test.ts",
-    "test:phase2": "tsx src/tests/document.test.ts"
+    "test:phase2": "tsx src/tests/document.test.ts",
+    "test:phase3": "tsx src/tests/retrieval.test.ts"
   },
   "dependencies": {
+    "@google/genai": "^0.1.1",
     "@supabase/supabase-js": "^2.49.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",

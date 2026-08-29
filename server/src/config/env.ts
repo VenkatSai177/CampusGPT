@@ -22,11 +22,15 @@ export const env = {
   MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '15', 10),
   UPLOAD_TEMP_DIR: process.env.UPLOAD_TEMP_DIR || path.resolve(__dirname, '../../uploads/temp'),
 
-  // Future Phases Configuration (Phase 3+)
+  // Phase 3 Embedding & Retrieval Configuration
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'text-embedding-004',
-  LLM_MODEL: process.env.LLM_MODEL || 'gemini-2.0-flash',
+  EMBEDDING_DIMENSIONS: parseInt(process.env.EMBEDDING_DIMENSIONS || '768', 10),
   RAG_SIMILARITY_THRESHOLD: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.65'),
+  TOP_K: parseInt(process.env.TOP_K || '4', 10),
+
+  // Future Phase Configuration (Phase 4+)
+  LLM_MODEL: process.env.LLM_MODEL || 'gemini-2.0-flash',
 };
 
 // Validate critical Phase 1 environment variables

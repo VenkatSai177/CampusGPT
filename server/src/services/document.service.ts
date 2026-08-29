@@ -4,6 +4,7 @@ import { DocumentModel } from '../models/document.model';
 import { ChunkModel } from '../models/chunk.model';
 import { PdfService } from './pdf.service';
 import { ChunkingService } from './chunking.service';
+import { EmbeddingService } from './embedding.service';
 import { DocumentRecord, DocumentChunkRecord } from '../types';
 import { AppError } from '../utils/appError';
 import { logger } from '../utils/logger';
@@ -24,14 +25,15 @@ export const DocumentService = {
   },
 
   /**
-   * Full Phase 2 Ingestion Pipeline:
+   * Full Ingestion Pipeline (Phase 2 Extraction + Phase 3 Embedding Vector Storage):
    * 1. Create document record ('pending')
    * 2. Set status to 'processing'
    * 3. Parse PDF page-by-page (preserves page_number)
-   * 4. Perform recursive page-aware text chunking (1000 chars, 200 overlap)
-   * 5. Batch insert chunks into DB
-   * 6. Set status to 'indexed'
-   * 7. Clean up temporary file
+   * 4. Perform recursive page-aware character chunking (1000 chars, 200 overlap)
+   * 5. Generate 768-dim Gemini vector embeddings for all text chunks
+   * 6. Batch store chunks + embeddings into Supabase pgvector
+   * 7. Set status to 'indexed'
+   * 8. Clean up temporary file
    */
   async ingestDocument(
     file: { originalname: string; path: string; size: number; mimetype?: string },
@@ -76,19 +78,27 @@ export const DocumentService = {
         throw new AppError('Failed to generate chunks from extracted document text.', 400);
       }
 
-      // Step 5: Store chunks in database
-      const storedChunks = await ChunkModel.createMany(doc.id, preparedChunks);
+      // Step 5: Phase 3 Embedding Generation
+      const chunkTexts = preparedChunks.map((c) => c.content);
+      const embeddings = await EmbeddingService.generateBatchEmbeddings(chunkTexts);
 
-      // Step 6: Update document record to 'indexed'
+      if (embeddings.length !== preparedChunks.length) {
+        throw new AppError('Embedding generation failed to produce matching vector count.', 500);
+      }
+
+      // Step 6: Store chunks with 768d embeddings in vector database
+      const storedChunks = await ChunkModel.createMany(doc.id, preparedChunks, embeddings);
+
+      // Step 7: Update document record to 'indexed'
       const updatedDoc = await DocumentModel.updateStatus(doc.id, 'indexed', {
         total_pages: parsedPages.length,
         total_chunks: storedChunks.length,
         error_message: null,
       });
 
-      logger.info(`✅ Ingestion Complete: Document "${doc.title}" [ID: ${doc.id}] marked 'indexed' (${parsedPages.length} pages, ${storedChunks.length} chunks).`);
+      logger.info(`✅ Ingestion & Vector Indexing Complete: Document "${doc.title}" [ID: ${doc.id}] marked 'indexed' (${parsedPages.length} pages, ${storedChunks.length} chunks embedded).`);
 
-      // Step 7: Clean up temp file
+      // Step 8: Clean up temp file
       await this.cleanupTempFile(file.path);
 
       return {
@@ -96,11 +106,11 @@ export const DocumentService = {
         total_chunks: storedChunks.length,
       };
     } catch (error: any) {
-      // Step 8: Handle processing failure gracefully
+      // Handle processing failure gracefully
       const errorMessage = error.message || 'Unknown error occurred during document processing.';
       logger.error(`❌ Ingestion Failed for Document [ID: ${doc.id}]:`, errorMessage);
 
-      // Purge any partial chunks
+      // Purge partial chunks
       await ChunkModel.deleteByDocumentId(doc.id);
 
       // Update status to 'failed'
@@ -135,9 +145,9 @@ export const DocumentService = {
       throw new AppError('Document not found.', 404);
     }
 
-    // 1. Delete associated chunk records
+    // 1. Delete associated chunk records and embeddings
     const deletedChunksCount = await ChunkModel.deleteByDocumentId(id);
-    logger.info(`🗑️ Purged ${deletedChunksCount} chunks for document ID: ${id}`);
+    logger.info(`🗑️ Purged ${deletedChunksCount} chunks and embeddings for document ID: ${id}`);
 
     // 2. Delete document record
     const deleted = await DocumentModel.delete(id);

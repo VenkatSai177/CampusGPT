@@ -12,6 +12,8 @@ CampusGPT is an enterprise-grade, retrieval-augmented generation (RAG) college a
 * **Authentication**: JWT stateless authentication + `bcryptjs` password hashing (cost factor 12)
 * **PDF Extraction**: `pdf-parse` (Page-aware extraction preserving `page_number`)
 * **Text Chunking**: Recursive character splitter ($1000$ characters size, $200$ characters overlap)
+* **Embedding Model**: Google Gemini `text-embedding-004` ($768$ dimensions) via `@google/genai`
+* **Vector Search**: Supabase `pgvector` Cosine Similarity Search (`match_document_chunks` RPC, HNSW `vector_cosine_ops` index)
 * **Architecture**: Monorepo (`client/` and `server/`)
 
 ---
@@ -35,16 +37,16 @@ CampusGPT/
 ├── server/                     # Node.js + Express + TypeScript API
 │   ├── src/
 │   │   ├── config/             # env.ts, db.ts
-│   │   ├── controllers/        # auth.controller.ts, admin.controller.ts
-│   │   ├── middleware/         # authMiddleware.ts, adminGuard.ts, uploadMiddleware.ts, errorHandler.ts
-│   │   ├── models/             # user.model.ts, document.model.ts, chunk.model.ts
+│   │   ├── controllers/        # auth, admin, retrieval controllers
+│   │   ├── middleware/         # authMiddleware, adminGuard, uploadMiddleware, errorHandler
+│   │   ├── models/             # user.model.ts, document.model.ts, chunk.model.ts (pgvector search)
 │   │   ├── routes/             # auth.routes.ts, health.routes.ts, admin.routes.ts
-│   │   ├── services/           # auth.service.ts, pdf.service.ts, chunking.service.ts, document.service.ts
-│   │   ├── tests/              # auth.test.ts (Phase 1), document.test.ts (Phase 2)
+│   │   ├── services/           # auth, pdf, chunking, document, embedding, vector services
+│   │   ├── tests/              # auth.test.ts (P1), document.test.ts (P2), retrieval.test.ts (P3)
 │   │   ├── types/              # Backend TypeScript definitions
 │   │   ├── app.ts              # Express application configuration
 │   │   └── index.ts            # Server entry point
-│   ├── schema.sql              # Supabase PostgreSQL DDL script
+│   ├── schema.sql              # Supabase PostgreSQL DDL & match_document_chunks RPC script
 │   ├── package.json
 │   └── tsconfig.json
 │
@@ -69,13 +71,13 @@ cp server/.env.example server/.env
 cp client/.env.example client/.env
 ```
 
-### 3. Database Setup (Supabase PostgreSQL)
+### 3. Database & Vector Setup (Supabase PostgreSQL + pgvector)
 1. Create a Supabase project at [https://supabase.com](https://supabase.com).
 2. Open the SQL Editor in Supabase Dashboard.
-3. Run the SQL DDL script contained in [`server/schema.sql`](file:///e:/CampusGPT/server/schema.sql).
+3. Run the SQL DDL script contained in [`server/schema.sql`](file:///e:/CampusGPT/server/schema.sql). This enables `vector`, builds the HNSW cosine index, and registers the `match_document_chunks` RPC function.
 4. Update `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `server/.env`.
 
-*(Note: If Supabase credentials are omitted during development, the server automatically uses an in-memory repository for local testing).*
+*(Note: If Supabase credentials are omitted during development, the server automatically uses an in-memory vector similarity fallback repository).*
 
 ### 4. Running the Backend Server
 ```bash
@@ -89,8 +91,9 @@ Backend API will start at: `http://localhost:5000`
 ### 5. Running the Backend Test Suites
 ```bash
 cd server
-npm test               # Runs Phase 1 Authentication & Infrastructure tests
-npm run test:phase2    # Runs Phase 2 PDF Extraction & Chunking Pipeline tests
+npm test               # Phase 1 Authentication & Infrastructure test suite
+npm run test:phase2    # Phase 2 PDF Extraction & Chunking Pipeline test suite
+npm run test:phase3    # Phase 3 Embedding & Vector Retrieval Benchmark test suite
 ```
 
 ### 6. Running the Frontend Application
@@ -103,53 +106,53 @@ Frontend App will start at: `http://localhost:5173`
 
 ---
 
-## Phase 2 Document Ingestion Architecture
+## Phase 3 Vector Embedding & Retrieval Architecture
 
-### File Upload & Storage Strategy
-* **File Validation**: MIME type `application/pdf`, extension `.pdf`, max file size limit $15\text{MB}$ (configurable via `MAX_FILE_SIZE_MB`).
-* **Temporary Processing Storage**: PDF files are streamed into temporary server storage (`uploads/temp`) during extraction. Files are automatically unlinked and cleaned up immediately after ingestion completes or fails.
+### Embedding Model
+* **Model**: Google Gemini `text-embedding-004`
+* **Dimensions**: $768$ dimensions (verified in `@google/genai` SDK `embedContent` API)
+* **Batch Strategy**: Concurrency-controlled batching ($10$ chunks per batch) with exponential backoff retries.
 
-### Ingestion Workflow
-1. **Admin Upload**: Admin submits PDF via `POST /api/admin/documents`.
-2. **Record Creation**: `documents` table record created with `status = 'pending'`.
-3. **Status Transition**: Status updated to `status = 'processing'`.
-4. **Page-Aware PDF Parsing**: `pdf-parse` extracts text page-by-page, preserving 1-indexed `page_number` for every extracted page object.
-5. **Text Cleaning**: Normalizes excessive whitespace and control characters while preserving paragraph breaks and headings.
-6. **Page-Aware Recursive Chunking**: Text is split recursively (1000 characters chunk size, 200 characters overlap). Every generated chunk preserves `document_id`, `document_title`, `filename`, `page_number`, and sequential `chunk_index`.
-7. **Database Persistence**: Chunks are stored in `document_chunks` table leaving `embedding VECTOR(768)` field null (ready for Phase 3 vector computation).
-8. **Final Status Update**: Document status updated to `status = 'indexed'` with `total_pages` and `total_chunks`.
+### Supabase pgvector Indexing & Search
+* **Vector Index**: HNSW index using Cosine Distance (`vector_cosine_ops`).
+* **Database RPC Function**: `match_document_chunks(query_embedding, match_count, similarity_threshold)`
+* **Similarity Calculation**: $\text{Cosine Similarity} = 1 - (\text{embedding} \Leftrightarrow \text{query\_embedding})$
+* **Cutoff Threshold**: Configurable via `RAG_SIMILARITY_THRESHOLD` (Default: `0.65`). Results with similarity $< 0.65$ are filtered out.
+* **Top-K Limit**: Configurable via `TOP_K` (Default: `4`).
 
 ---
 
-## Admin API Endpoints
+## Admin Retrieval Diagnostic API
 
-### Authentication & Admin Role Required (`Authorization: Bearer <JWT_TOKEN>`)
-
-#### `POST /api/admin/documents`
-* **Content-Type**: `multipart/form-data` (`file` field)
-* **Response (201 Created)**:
+### `POST /api/admin/retrieval/test`
+* **Auth Required**: Bearer JWT (`role === 'admin'`)
+* **Request Body**:
+  ```json
+  {
+    "query": "What is the minimum attendance requirement for final exams?",
+    "top_k": 4,
+    "threshold": 0.65
+  }
+  ```
+* **Response (200 OK)**:
   ```json
   {
     "success": true,
-    "message": "Document ingested and processed successfully into page-aware text chunks.",
-    "document": {
-      "id": "doc-uuid",
-      "title": "Academic Regulations 2025",
-      "filename": "Academic_Regulations_2025.pdf",
-      "file_size": 1048576,
-      "status": "indexed",
-      "total_pages": 14,
-      "total_chunks": 42
-    },
-    "total_chunks": 42
+    "query": "What is the minimum attendance requirement for final exams?",
+    "top_k": 4,
+    "similarity_threshold": 0.65,
+    "total_matches": 1,
+    "results": [
+      {
+        "chunk_id": "chunk-uuid",
+        "document_id": "doc-uuid",
+        "document_title": "Academic Regulations 2025",
+        "filename": "Academic_Regulations_2025.pdf",
+        "page_number": 14,
+        "chunk_index": 3,
+        "content": "Attendance Requirement: Students must maintain a minimum of 75%...",
+        "similarity": 0.8724
+      }
+    ]
   }
   ```
-
-#### `GET /api/admin/documents`
-* **Response (200 OK)**: `{ "success": true, "count": 1, "documents": [...] }`
-
-#### `GET /api/admin/documents/:id`
-* **Response (200 OK)**: `{ "success": true, "document": { ... }, "chunk_count": 42, "chunks": [...] }`
-
-#### `DELETE /api/admin/documents/:id`
-* **Response (200 OK)**: `{ "success": true, "message": "Document and associated page chunks successfully deleted.", "id": "doc-uuid" }`
