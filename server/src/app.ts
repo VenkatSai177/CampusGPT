@@ -5,12 +5,17 @@ import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
 import chatRoutes from './routes/chat.routes';
+import conversationRoutes from './routes/conversation.routes';
+import { securityHeadersMiddleware, authRateLimiter, chatRateLimiter } from './middleware/security';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 
 const app: Application = express();
 
-// Global Middleware Configuration
+// Apply Security Response Headers
+app.use(securityHeadersMiddleware);
+
+// Global CORS Middleware Configuration
 app.use(
   cors({
     origin: env.CLIENT_URL,
@@ -29,11 +34,12 @@ app.use((req: Request, _res: Response, next) => {
   next();
 });
 
-// API Routes
+// API Routes with Rate-Limiting Protection
 app.use('/api/health', healthRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRateLimiter, authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/chat', chatRoutes);
+app.use('/api/chat', chatRateLimiter, chatRoutes);
+app.use('/api', conversationRoutes);
 
 // 404 Fallback Handler
 app.use((_req: Request, res: Response) => {

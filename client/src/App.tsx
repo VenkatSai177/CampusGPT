@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { StudentShell } from './pages/StudentShell';
+import { ChatPage } from './pages/ChatPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -34,9 +34,9 @@ export const App: React.FC = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Protected Student Shell Route */}
+          {/* Protected Student Chat Shell Route */}
           <Route element={<ProtectedRoute allowedRoles={['student', 'admin']} />}>
-            <Route path="/chat" element={<StudentShell />} />
+            <Route path="/chat" element={<ChatPage />} />
           </Route>
 
           {/* Protected Admin Portal Route */}

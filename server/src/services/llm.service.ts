@@ -44,41 +44,38 @@ STRICT GROUNDING & SECURITY RULES:
  * when live Gemini API key is absent.
  */
 function generateLocalGroundedAnswer(context: string, question: string): string {
-  // Extract sentences from context that share terms with the question
   const cleanQuestion = question.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-  const queryTerms = new Set(cleanQuestion.split(/\s+/).filter((w) => w.length > 3));
+  const queryTerms = new Set(cleanQuestion.split(/\s+/).filter((w) => w.length >= 3));
 
-  const sentences = context
-    .split(/(?<=[.!?])\s+/)
+  // Extract lines excluding headers and separators
+  const lines = context
+    .split('\n')
     .map((s) => s.trim())
-    .filter((s) => !s.startsWith('---') && !s.startsWith('Source:') && !s.startsWith('Content:'));
+    .filter((s) => s.length > 0 && !s.startsWith('---') && !s.startsWith('Source:') && !s.startsWith('Content:'));
 
-  const matchedSentences: string[] = [];
+  const matchedLines: string[] = [];
 
-  for (const sentence of sentences) {
-    const lowerSent = sentence.toLowerCase();
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
     let termMatchCount = 0;
     for (const term of queryTerms) {
-      if (lowerSent.includes(term)) {
+      if (lowerLine.includes(term)) {
         termMatchCount++;
       }
     }
 
-    if (termMatchCount >= 1 && sentence.length > 15) {
-      // Clean leading document metadata headers if present
-      const cleanSent = sentence.replace(/^[A-Za-z0-9\s._-]+:\s*/, '');
-      if (!matchedSentences.includes(cleanSent)) {
-        matchedSentences.push(cleanSent);
+    if (termMatchCount >= 1 && line.length > 10) {
+      if (!matchedLines.includes(line)) {
+        matchedLines.push(line);
       }
     }
   }
 
-  if (matchedSentences.length > 0) {
-    return matchedSentences.join(' ');
+  if (matchedLines.length > 0) {
+    return matchedLines.join(' ');
   }
 
-  // Fallback to first major policy sentence in context
-  const firstFact = sentences.find((s) => s.length > 30 && !s.includes('---'));
+  const firstFact = lines.find((l) => l.length > 20);
   return firstFact || 'According to official college documentation, please refer to the cited page for details.';
 }
 

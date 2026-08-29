@@ -6,15 +6,18 @@ CampusGPT is an enterprise-grade, retrieval-augmented generation (RAG) college a
 
 ## Technical Stack & Architectural Status
 
+* **Phase Status**: **Phases 1–6 COMPLETE** | **Phase 7 Pending** (Production Deployment)
 * **Frontend**: React (v18+) + TypeScript + Vite + Tailwind CSS
 * **Backend**: Node.js + Express + TypeScript
 * **Database & Vector Storage**: Supabase (PostgreSQL + `pgvector` extension)
 * **Authentication**: JWT stateless authentication + `bcryptjs` password hashing (cost factor 12)
+* **Security Middleware**: Express Security Headers (nosniff, DENY frame options, XSS protection, HSTS, CSP) & Sliding Window Rate Limiting
 * **PDF Extraction**: `pdf-parse` (Page-aware extraction preserving `page_number`)
 * **Text Chunking**: Recursive character splitter ($1000$ characters size, $200$ characters overlap)
 * **Embedding Model**: Google Gemini `text-embedding-004` ($768$ dimensions) via `@google/genai`
 * **LLM Synthesis Model**: Google Gemini 2.0 Flash (`gemini-2.0-flash`)
 * **Vector Search**: Supabase `pgvector` Cosine Similarity Search (`match_document_chunks` RPC, HNSW `vector_cosine_ops` index)
+* **RAG Benchmark Evaluation Engine**: In-scope vs Out-of-scope automated evaluation suite (`Recall@4`, Grounded Accuracy, Citation Accuracy, Fallback Accuracy)
 * **Architecture**: Monorepo (`client/` and `server/`)
 
 ---
@@ -25,11 +28,11 @@ CampusGPT is an enterprise-grade, retrieval-augmented generation (RAG) college a
 CampusGPT/
 ├── client/                     # React + TypeScript + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── components/         # ProtectedRoute, UploadDropzone, DocumentTable
+│   │   ├── components/         # ProtectedRoute, UploadDropzone, DocumentTable, MessageBubble, SourceBadge, HistorySidebar, ChatComposer, RagEvaluation
 │   │   ├── context/            # AuthContext (state management)
-│   │   ├── pages/              # LoginPage, RegisterPage, StudentShell, AdminPage
-│   │   ├── services/           # api.ts (Axios wrapper with JWT interceptor)
-│   │   ├── types/              # TypeScript interfaces (User, DocumentRecord)
+│   │   ├── pages/              # LoginPage, RegisterPage, ChatPage, AdminPage
+│   │   ├── services/           # api.ts, chat.service.ts
+│   │   ├── types/              # TypeScript interfaces
 │   │   ├── App.tsx             # React Router configuration
 │   │   └── main.tsx            # React DOM root
 │   ├── package.json
@@ -38,12 +41,12 @@ CampusGPT/
 ├── server/                     # Node.js + Express + TypeScript API
 │   ├── src/
 │   │   ├── config/             # env.ts, db.ts
-│   │   ├── controllers/        # auth, admin, retrieval, chat controllers
-│   │   ├── middleware/         # authMiddleware, adminGuard, uploadMiddleware, errorHandler
-│   │   ├── models/             # user.model.ts, document.model.ts, chunk.model.ts (pgvector search)
-│   │   ├── routes/             # auth, health, admin, chat routes
-│   │   ├── services/           # auth, pdf, chunking, document, embedding, vector, llm, rag services
-│   │   ├── tests/              # auth (P1), document (P2), retrieval (P3), rag (P4) test suites
+│   │   ├── controllers/        # auth, admin, retrieval, chat, conversation controllers
+│   │   ├── middleware/         # authMiddleware, adminGuard, uploadMiddleware, security, errorHandler
+│   │   ├── models/             # user.model.ts, document.model.ts, chunk.model.ts, conversation.model.ts, message.model.ts
+│   │   ├── routes/             # auth, health, admin, chat, conversation routes
+│   │   ├── services/           # auth, pdf, chunking, document, embedding, vector, llm, rag, evaluation services
+│   │   ├── tests/              # auth (P1), document (P2), retrieval (P3), rag (P4), conversation (P5), admin (P6) test suites
 │   │   ├── types/              # Backend TypeScript definitions
 │   │   ├── app.ts              # Express application configuration
 │   │   └── index.ts            # Server entry point
@@ -89,13 +92,15 @@ npm run dev
 Backend API will start at: `http://localhost:5000`
 * Health Check: `GET http://localhost:5000/api/health`
 
-### 5. Running the Complete Backend Test Suites
+### 5. Running the Complete Backend Test Suites across all 6 Phases
 ```bash
 cd server
 npm test               # Phase 1 Authentication & Infrastructure test suite
 npm run test:phase2    # Phase 2 PDF Extraction & Chunking Pipeline test suite
 npm run test:phase3    # Phase 3 Embedding & Vector Retrieval Benchmark test suite
 npm run test:phase4    # Phase 4 Grounded RAG Pipeline & Hallucination Defense test suite
+npm run test:phase5    # Phase 5 Conversation History & Student Experience test suite
+npm run test:phase6    # Phase 6 Admin Analytics, RAG Evaluation & Vector Purge test suite
 ```
 
 ### 6. Running the Frontend Application
@@ -108,7 +113,7 @@ Frontend App will start at: `http://localhost:5173`
 
 ---
 
-## Phase 4 Grounded RAG Question-Answering Pipeline
+## Grounded RAG Question-Answering Architecture
 
 ```
 Student Query
@@ -135,48 +140,15 @@ Backend Structured Answer + Source Page Citations
 * **Hard Boundary Rule A**: If pgvector returns 0 chunks above threshold $\rightarrow$ Gemini call is skipped entirely; returns exact fallback message.
 * **Hard Boundary Rule B**: If maximum similarity score $< 0.65$ (`RAG_SIMILARITY_THRESHOLD`) $\rightarrow$ Gemini call is skipped; returns exact fallback message: `"I could not find relevant official college information regarding your request."`
 * **Prompt Injection Defense**: Retrieved chunk text is treated strictly as passive evidence. System instruction overrides any commands/instructions embedded inside document text.
+* **Document Deletion Safety**: Deleting a document purges all chunks and embeddings. Subsequent vector searches cannot retrieve deleted document content.
 
 ---
 
-## RAG Chat Endpoint (`POST /api/chat`)
+## Admin Endpoints & RAG Evaluation Engine
 
-* **Auth Required**: Bearer JWT (`role === 'student'` or `role === 'admin'`)
-* **Request Body**:
-  ```json
-  {
-    "query": "What is the minimum attendance percentage required for final semester exams?"
-  }
-  ```
-* **Success Response (200 OK - Grounded Answer)**:
-  ```json
-  {
-    "success": true,
-    "answer": "Students must maintain a minimum of 75% attendance in each registered course to be eligible to sit for semester end examinations.",
-    "sources": [
-      {
-        "document_title": "Academic Regulations 2025",
-        "filename": "Academic_Regulations_2025.pdf",
-        "page_number": 14,
-        "chunk_index": 3
-      }
-    ],
-    "grounded": true,
-    "fallback": false,
-    "similarity_score": 0.8724,
-    "latency": {
-      "retrieval_ms": 2,
-      "llm_generation_ms": 120,
-      "total_rag_ms": 122
-    }
-  }
-  ```
-* **Fallback Response (200 OK - Out of Scope Query)**:
-  ```json
-  {
-    "success": true,
-    "answer": "I could not find relevant official college information regarding your request.",
-    "sources": [],
-    "grounded": false,
-    "fallback": true
-  }
-  ```
+* `GET /api/admin/stats` - System totals (Documents, Pages, Chunks, Threads, Messages, Feedback %)
+* `POST /api/admin/documents` - PDF upload & vector ingestion
+* `GET /api/admin/documents` - Document list & status
+* `DELETE /api/admin/documents/:id` - Permanent deletion of document, chunks, and vectors
+* `POST /api/admin/evaluation/run` - Runs automated RAG evaluation benchmark suite
+* `GET /api/admin/evaluation/results` - Retrieves cached evaluation benchmark results

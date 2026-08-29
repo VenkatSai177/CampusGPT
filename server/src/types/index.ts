@@ -77,13 +77,43 @@ export interface DocumentChunkRecord {
   page_number: number;
   content: string;
   metadata: DocumentChunkMetadata;
-  embedding?: number[] | null; // Reserved for Phase 3 vector storage
+  embedding?: number[] | null;
   created_at: string;
 }
 
 export interface ParsedPdfPage {
   page_number: number;
   text: string;
+}
+
+// --- Phase 5 Conversation & Message Types ---
+
+export type MessageSender = 'user' | 'assistant';
+export type MessageFeedback = 'like' | 'dislike' | null;
+
+export interface SourceCitation {
+  document_title: string;
+  filename: string;
+  page_number: number;
+  chunk_index: number;
+}
+
+export interface ConversationRecord {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageRecord {
+  id: string;
+  conversation_id: string;
+  sender: MessageSender;
+  text: string;
+  sources: SourceCitation[];
+  feedback: MessageFeedback;
+  created_at: string;
 }
 
 declare global {
