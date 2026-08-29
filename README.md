@@ -4,14 +4,14 @@ CampusGPT is an enterprise-grade, retrieval-augmented generation (RAG) college a
 
 ---
 
-## Technical Stack & Architectural Status
+## Technical Stack & Production Deployment Status
 
-* **Phase Status**: **Phases 1–6 COMPLETE** | **Phase 7 Pending** (Production Deployment)
-* **Frontend**: React (v18+) + TypeScript + Vite + Tailwind CSS
-* **Backend**: Node.js + Express + TypeScript
-* **Database & Vector Storage**: Supabase (PostgreSQL + `pgvector` extension)
+* **Phase Status**: **Phases 1–7 COMPLETE (Production Deployment Verified)**
+* **Frontend Application**: React (v18+) + TypeScript + Vite + Tailwind CSS (Deployed on **Vercel**: `https://campusgpt.vercel.app`)
+* **Backend API**: Node.js + Express + TypeScript (Deployed on **Render**: `https://campusgpt-api.onrender.com`)
+* **Database & Vector Store**: Supabase (PostgreSQL + `pgvector` extension, 768d HNSW Cosine Index)
 * **Authentication**: JWT stateless authentication + `bcryptjs` password hashing (cost factor 12)
-* **Security Middleware**: Express Security Headers (nosniff, DENY frame options, XSS protection, HSTS, CSP) & Sliding Window Rate Limiting
+* **Security Middleware**: Express Security Headers (nosniff, DENY frame options, XSS protection, HSTS, CSP) & Sliding Window Rate Limiting (HTTP 429)
 * **PDF Extraction**: `pdf-parse` (Page-aware extraction preserving `page_number`)
 * **Text Chunking**: Recursive character splitter ($1000$ characters size, $200$ characters overlap)
 * **Embedding Model**: Google Gemini `text-embedding-004` ($768$ dimensions) via `@google/genai`
@@ -35,6 +35,7 @@ CampusGPT/
 │   │   ├── types/              # TypeScript interfaces
 │   │   ├── App.tsx             # React Router configuration
 │   │   └── main.tsx            # React DOM root
+│   ├── vercel.json             # Vercel SPA Routing Configuration
 │   ├── package.json
 │   └── vite.config.ts
 │
@@ -81,7 +82,7 @@ cp client/.env.example client/.env
 3. Run the SQL DDL script contained in [`server/schema.sql`](file:///e:/CampusGPT/server/schema.sql). This enables `vector`, builds the HNSW cosine index, and registers the `match_document_chunks` RPC function.
 4. Update `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `server/.env`.
 
-*(Note: If Supabase credentials are omitted during development, the server automatically uses an in-memory vector similarity fallback repository).*
+*(Note: If Supabase credentials are omitted during local development, the server automatically uses an in-memory vector similarity fallback repository).*
 
 ### 4. Running the Backend Server
 ```bash
@@ -92,7 +93,7 @@ npm run dev
 Backend API will start at: `http://localhost:5000`
 * Health Check: `GET http://localhost:5000/api/health`
 
-### 5. Running the Complete Backend Test Suites across all 6 Phases
+### 5. Running the Complete Backend Test Suites across all Phases
 ```bash
 cd server
 npm test               # Phase 1 Authentication & Infrastructure test suite
