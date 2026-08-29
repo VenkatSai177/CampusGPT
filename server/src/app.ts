@@ -18,7 +18,29 @@ app.use(securityHeadersMiddleware);
 // Global CORS Middleware Configuration
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: (requestOrigin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+      if (!requestOrigin) return callback(null, true);
+
+      const allowedOrigins = [
+        env.CLIENT_URL,
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+      ];
+
+      if (
+        allowedOrigins.includes(requestOrigin) ||
+        requestOrigin.endsWith('.vercel.app') ||
+        requestOrigin.endsWith('.onrender.com') ||
+        env.NODE_ENV !== 'production'
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS policy violation: Origin ${requestOrigin} not allowed.`));
+    },
     credentials: true,
   })
 );

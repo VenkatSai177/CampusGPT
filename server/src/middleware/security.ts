@@ -24,7 +24,7 @@ export const securityHeadersMiddleware = (
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;"
   );
   if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -41,6 +41,11 @@ export const createRateLimiter = (options: { windowMs: number; maxRequests: numb
   const message = options.message || 'Too many requests from this IP, please try again later.';
 
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Always bypass preflight CORS OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const key = `${req.baseUrl}${req.path}:${ip}`;
     const now = Date.now();
