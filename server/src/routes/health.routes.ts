@@ -2,11 +2,11 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
-router.get('/health', (req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     system: 'CampusGPT Backend API',
-    phase: 'Phase 1 - Infrastructure & Authentication',
+    phase: 'Phase 4 - Grounded RAG Pipeline',
     timestamp: new Date().toISOString(),
   });
 });

@@ -13,6 +13,7 @@ CampusGPT is an enterprise-grade, retrieval-augmented generation (RAG) college a
 * **PDF Extraction**: `pdf-parse` (Page-aware extraction preserving `page_number`)
 * **Text Chunking**: Recursive character splitter ($1000$ characters size, $200$ characters overlap)
 * **Embedding Model**: Google Gemini `text-embedding-004` ($768$ dimensions) via `@google/genai`
+* **LLM Synthesis Model**: Google Gemini 2.0 Flash (`gemini-2.0-flash`)
 * **Vector Search**: Supabase `pgvector` Cosine Similarity Search (`match_document_chunks` RPC, HNSW `vector_cosine_ops` index)
 * **Architecture**: Monorepo (`client/` and `server/`)
 
@@ -37,12 +38,12 @@ CampusGPT/
 ├── server/                     # Node.js + Express + TypeScript API
 │   ├── src/
 │   │   ├── config/             # env.ts, db.ts
-│   │   ├── controllers/        # auth, admin, retrieval controllers
+│   │   ├── controllers/        # auth, admin, retrieval, chat controllers
 │   │   ├── middleware/         # authMiddleware, adminGuard, uploadMiddleware, errorHandler
 │   │   ├── models/             # user.model.ts, document.model.ts, chunk.model.ts (pgvector search)
-│   │   ├── routes/             # auth.routes.ts, health.routes.ts, admin.routes.ts
-│   │   ├── services/           # auth, pdf, chunking, document, embedding, vector services
-│   │   ├── tests/              # auth.test.ts (P1), document.test.ts (P2), retrieval.test.ts (P3)
+│   │   ├── routes/             # auth, health, admin, chat routes
+│   │   ├── services/           # auth, pdf, chunking, document, embedding, vector, llm, rag services
+│   │   ├── tests/              # auth (P1), document (P2), retrieval (P3), rag (P4) test suites
 │   │   ├── types/              # Backend TypeScript definitions
 │   │   ├── app.ts              # Express application configuration
 │   │   └── index.ts            # Server entry point
@@ -88,12 +89,13 @@ npm run dev
 Backend API will start at: `http://localhost:5000`
 * Health Check: `GET http://localhost:5000/api/health`
 
-### 5. Running the Backend Test Suites
+### 5. Running the Complete Backend Test Suites
 ```bash
 cd server
 npm test               # Phase 1 Authentication & Infrastructure test suite
 npm run test:phase2    # Phase 2 PDF Extraction & Chunking Pipeline test suite
 npm run test:phase3    # Phase 3 Embedding & Vector Retrieval Benchmark test suite
+npm run test:phase4    # Phase 4 Grounded RAG Pipeline & Hallucination Defense test suite
 ```
 
 ### 6. Running the Frontend Application
@@ -106,53 +108,75 @@ Frontend App will start at: `http://localhost:5173`
 
 ---
 
-## Phase 3 Vector Embedding & Retrieval Architecture
+## Phase 4 Grounded RAG Question-Answering Pipeline
 
-### Embedding Model
-* **Model**: Google Gemini `text-embedding-004`
-* **Dimensions**: $768$ dimensions (verified in `@google/genai` SDK `embedContent` API)
-* **Batch Strategy**: Concurrency-controlled batching ($10$ chunks per batch) with exponential backoff retries.
+```
+Student Query
+  │
+  ▼
+Embedding Generation (text-embedding-004)
+  │
+  ▼
+Supabase pgvector Cosine Search (Top-4 Chunks)
+  │
+  ├────── Match Count == 0 OR Similarity < 0.65 ────► Safe Fallback ("I could not find...")
+  │
+  ▼ Match Similarity >= 0.65
+Grounded Context Assembly + Source Provenance
+  │
+  ▼
+Gemini 2.0 Flash Generation (systemInstruction grounding + prompt injection defense)
+  │
+  ▼
+Backend Structured Answer + Source Page Citations
+```
 
-### Supabase pgvector Indexing & Search
-* **Vector Index**: HNSW index using Cosine Distance (`vector_cosine_ops`).
-* **Database RPC Function**: `match_document_chunks(query_embedding, match_count, similarity_threshold)`
-* **Similarity Calculation**: $\text{Cosine Similarity} = 1 - (\text{embedding} \Leftrightarrow \text{query\_embedding})$
-* **Cutoff Threshold**: Configurable via `RAG_SIMILARITY_THRESHOLD` (Default: `0.65`). Results with similarity $< 0.65$ are filtered out.
-* **Top-K Limit**: Configurable via `TOP_K` (Default: `4`).
+### Hallucination Protection Rules
+* **Hard Boundary Rule A**: If pgvector returns 0 chunks above threshold $\rightarrow$ Gemini call is skipped entirely; returns exact fallback message.
+* **Hard Boundary Rule B**: If maximum similarity score $< 0.65$ (`RAG_SIMILARITY_THRESHOLD`) $\rightarrow$ Gemini call is skipped; returns exact fallback message: `"I could not find relevant official college information regarding your request."`
+* **Prompt Injection Defense**: Retrieved chunk text is treated strictly as passive evidence. System instruction overrides any commands/instructions embedded inside document text.
 
 ---
 
-## Admin Retrieval Diagnostic API
+## RAG Chat Endpoint (`POST /api/chat`)
 
-### `POST /api/admin/retrieval/test`
-* **Auth Required**: Bearer JWT (`role === 'admin'`)
+* **Auth Required**: Bearer JWT (`role === 'student'` or `role === 'admin'`)
 * **Request Body**:
   ```json
   {
-    "query": "What is the minimum attendance requirement for final exams?",
-    "top_k": 4,
-    "threshold": 0.65
+    "query": "What is the minimum attendance percentage required for final semester exams?"
   }
   ```
-* **Response (200 OK)**:
+* **Success Response (200 OK - Grounded Answer)**:
   ```json
   {
     "success": true,
-    "query": "What is the minimum attendance requirement for final exams?",
-    "top_k": 4,
-    "similarity_threshold": 0.65,
-    "total_matches": 1,
-    "results": [
+    "answer": "Students must maintain a minimum of 75% attendance in each registered course to be eligible to sit for semester end examinations.",
+    "sources": [
       {
-        "chunk_id": "chunk-uuid",
-        "document_id": "doc-uuid",
         "document_title": "Academic Regulations 2025",
         "filename": "Academic_Regulations_2025.pdf",
         "page_number": 14,
-        "chunk_index": 3,
-        "content": "Attendance Requirement: Students must maintain a minimum of 75%...",
-        "similarity": 0.8724
+        "chunk_index": 3
       }
-    ]
+    ],
+    "grounded": true,
+    "fallback": false,
+    "similarity_score": 0.8724,
+    "latency": {
+      "retrieval_ms": 2,
+      "llm_generation_ms": 120,
+      "total_rag_ms": 122
+    }
+  }
+  ```
+* **Fallback Response (200 OK - Out of Scope Query)**:
+  ```json
+  {
+    "success": true,
+    "answer": "I could not find relevant official college information regarding your request.",
+    "sources": [],
+    "grounded": false,
+    "fallback": true
   }
   ```

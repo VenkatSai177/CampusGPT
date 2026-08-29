@@ -29,8 +29,10 @@ export const env = {
   RAG_SIMILARITY_THRESHOLD: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.65'),
   TOP_K: parseInt(process.env.TOP_K || '4', 10),
 
-  // Future Phase Configuration (Phase 4+)
+  // Phase 4 LLM Generation Configuration
   LLM_MODEL: process.env.LLM_MODEL || 'gemini-2.0-flash',
+  ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK:
+    process.env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK !== 'false', // Default true in dev/testing; set false in prod
 };
 
 // Validate critical Phase 1 environment variables
