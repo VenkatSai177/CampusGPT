@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { StudentShell } from './pages/StudentShell';
-import { AdminShell } from './pages/AdminShell';
+import { AdminPage } from './pages/AdminPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 const RootRedirect: React.FC = () => {
@@ -39,9 +39,9 @@ export const App: React.FC = () => {
             <Route path="/chat" element={<StudentShell />} />
           </Route>
 
-          {/* Protected Admin Shell Route */}
+          {/* Protected Admin Portal Route */}
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-            <Route path="/admin" element={<AdminShell />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
 
           {/* Root Fallback */}

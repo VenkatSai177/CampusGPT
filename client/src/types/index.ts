@@ -14,3 +14,19 @@ export interface AuthResponse {
   token?: string;
   user?: User;
 }
+
+export type DocumentStatus = 'pending' | 'processing' | 'indexed' | 'failed';
+
+export interface DocumentRecord {
+  id: string;
+  title: string;
+  filename: string;
+  file_size: number;
+  mime_type: string;
+  status: DocumentStatus;
+  total_pages: number;
+  total_chunks: number;
+  error_message?: string | null;
+  uploaded_by: string;
+  created_at: string;
+}

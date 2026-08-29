@@ -18,6 +18,10 @@ export const env = {
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   DATABASE_URL: process.env.DATABASE_URL || '',
 
+  // Phase 2 Ingestion Settings
+  MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '15', 10),
+  UPLOAD_TEMP_DIR: process.env.UPLOAD_TEMP_DIR || path.resolve(__dirname, '../../uploads/temp'),
+
   // Future Phases Configuration (Phase 3+)
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'text-embedding-004',

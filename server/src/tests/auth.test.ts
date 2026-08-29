@@ -17,7 +17,7 @@ async function runTests() {
     // Test 1: Health Check
     console.log('1️⃣  Testing GET /api/health ...');
     const healthRes = await fetch(`${baseUrl}/health`);
-    const healthData = await healthRes.json();
+    const healthData = (await healthRes.json()) as any;
     if (healthRes.status === 200 && healthData.status === 'ok') {
       console.log('   ✅ Health endpoint returned 200 OK.');
     } else {
@@ -36,7 +36,7 @@ async function runTests() {
         role: 'student',
       }),
     });
-    const regData = await regRes.json();
+    const regData = (await regRes.json()) as any;
     if (regRes.status === 201 && regData.token && regData.user.role === 'student') {
       studentToken = regData.token;
       console.log('   ✅ Student registered successfully. JWT issued.');
@@ -74,7 +74,7 @@ async function runTests() {
         password: 'Password123!',
       }),
     });
-    const loginData = await loginRes.json();
+    const loginData = (await loginRes.json()) as any;
     if (loginRes.status === 200 && loginData.token) {
       console.log('   ✅ Login successful with valid password.');
     } else {
@@ -102,7 +102,7 @@ async function runTests() {
     const meRes = await fetch(`${baseUrl}/auth/me`, {
       headers: { Authorization: `Bearer ${studentToken}` },
     });
-    const meData = await meRes.json();
+    const meData = (await meRes.json()) as any;
     if (meRes.status === 200 && meData.user.email === 'student@test.edu') {
       console.log('   ✅ Profile fetched successfully via JWT authorization header.');
     } else {
@@ -130,7 +130,7 @@ async function runTests() {
         role: 'admin',
       }),
     });
-    const adminRegData = await adminRegRes.json();
+    const adminRegData = (await adminRegRes.json()) as any;
     if (adminRegRes.status === 201 && adminRegData.user.role === 'admin') {
       adminToken = adminRegData.token;
       console.log('   ✅ Admin account created with role="admin".');
