@@ -8,6 +8,10 @@ build/
 client/dist/
 server/dist/
 
+# Uploads and temporary storage
+uploads/
+server/uploads/
+
 # Environment variables
 .env
 .env.local
