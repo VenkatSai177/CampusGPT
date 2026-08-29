@@ -22,7 +22,11 @@ if (isValidKeyFormat) {
     logger.warn('Failed to initialize Google Gen AI SDK:', err.message);
   }
 } else {
-  logger.info('ℹ️ Live GEMINI_API_KEY not supplied or placeholder used. Utilizing deterministic 768-dim vector embedding generator for local dev/testing.');
+  if (env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+    logger.info('ℹ️ Live GEMINI_API_KEY not supplied or placeholder used. Utilizing deterministic 768-dim vector embedding generator for local dev/testing.');
+  } else {
+    logger.warn('⚠️ Live GEMINI_API_KEY missing or invalid in production configuration.');
+  }
 }
 
 /**
@@ -86,6 +90,9 @@ export const EmbeddingService = {
     }
 
     if (!genAIClient) {
+      if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+        throw new AppError('Google Gemini Embedding API key is missing or invalid, and fallback generator is disabled in production.', 500);
+      }
       return generateDeterministicEmbedding(text);
     }
 
@@ -114,20 +121,25 @@ export const EmbeddingService = {
 
         return embeddingValues;
       } catch (error: any) {
-        // If API key is invalid or network fails, permanently fall back to deterministic generator
         if (
           error.message &&
           (error.message.includes('API key not valid') ||
             error.message.includes('API_KEY_INVALID') ||
             error.message.includes('INVALID_ARGUMENT'))
         ) {
-          logger.warn('⚠️ Gemini API Key invalid or expired. Falling back to deterministic local embedding generator for all operations.');
+          if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+            throw new AppError(`Gemini API key error in production: ${error.message}`, 502);
+          }
+          logger.warn('⚠️ Gemini API Key invalid or expired. Falling back to deterministic local embedding generator for testing.');
           genAIClient = null;
           return generateDeterministicEmbedding(text);
         }
 
         retries--;
         if (retries === 0) {
+          if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+            throw new AppError(`Gemini Embedding API call failed: ${error.message}`, 502);
+          }
           logger.warn('Gemini Embedding API call failed after retries. Falling back to local deterministic embedding generator.');
           genAIClient = null;
           return generateDeterministicEmbedding(text);
@@ -137,6 +149,9 @@ export const EmbeddingService = {
       }
     }
 
+    if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+      throw new AppError('Gemini Embedding generation failed in production mode.', 500);
+    }
     return generateDeterministicEmbedding(text);
   },
 
@@ -148,8 +163,10 @@ export const EmbeddingService = {
 
     logger.info(`🔢 Generating batch embeddings for ${texts.length} text chunks...`);
 
-    // If client is null (or offline mode), generate deterministic embeddings synchronously for the whole batch
     if (!genAIClient) {
+      if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+        throw new AppError('Google Gemini Embedding API key is missing or invalid in production.', 500);
+      }
       return texts.map((t) => generateDeterministicEmbedding(t));
     }
 
@@ -163,10 +180,8 @@ export const EmbeddingService = {
       );
       results.push(...batchResults);
 
-      // If genAIClient became null mid-batch due to API key error, recalculate all previous chunks deterministically!
-      if (!genAIClient) {
-        logger.info('🔄 API fallback triggered mid-batch. Re-embedding batch with deterministic generator.');
-        return texts.map((t) => generateDeterministicEmbedding(t));
+      if (!genAIClient && !env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+        throw new AppError('Gemini API connection lost during batch embedding generation in production.', 502);
       }
     }
 

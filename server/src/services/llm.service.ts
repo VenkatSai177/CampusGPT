@@ -22,7 +22,11 @@ if (isValidKeyFormat) {
     logger.warn('Failed to initialize Google Gen AI SDK for LLM:', err.message);
   }
 } else {
-  logger.info('ℹ️ Live GEMINI_API_KEY not supplied for LLM. Utilizing grounded local response synthesizer for dev/testing.');
+  if (env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+    logger.info('ℹ️ Live GEMINI_API_KEY not supplied for LLM. Utilizing grounded local response synthesizer for dev/testing.');
+  } else {
+    logger.warn('⚠️ Live GEMINI_API_KEY missing or invalid in production configuration for LLM.');
+  }
 }
 
 /**
@@ -92,6 +96,9 @@ export const LLMService = {
     }
 
     if (!genAIClient) {
+      if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+        throw new AppError('Google Gemini API key is missing or invalid, and fallback generator is disabled in production.', 500);
+      }
       return generateLocalGroundedAnswer(context, question);
     }
 
@@ -131,6 +138,9 @@ ANSWER:`;
             error.message.includes('API_KEY_INVALID') ||
             error.message.includes('INVALID_ARGUMENT'))
         ) {
+          if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+            throw new AppError(`Gemini API key error in production: ${error.message}`, 502);
+          }
           logger.warn('⚠️ Gemini API key invalid. Falling back to local grounded response synthesizer.');
           genAIClient = null;
           return generateLocalGroundedAnswer(context, question);
@@ -138,6 +148,9 @@ ANSWER:`;
 
         retries--;
         if (retries === 0) {
+          if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+            throw new AppError(`Failed to generate grounded response from LLM: ${error.message}`, 502);
+          }
           logger.error('Gemini 2.0 Flash LLM call failed after retries:', error.message);
           throw new AppError(`Failed to generate grounded response from LLM: ${error.message}`, 502);
         }
@@ -146,6 +159,9 @@ ANSWER:`;
       }
     }
 
+    if (!env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
+      throw new AppError('Gemini 2.0 Flash LLM call failed in production mode.', 500);
+    }
     return generateLocalGroundedAnswer(context, question);
   },
 };

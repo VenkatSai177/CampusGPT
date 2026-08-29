@@ -32,10 +32,12 @@ export const env = {
   // Phase 4 LLM Generation Configuration
   LLM_MODEL: process.env.LLM_MODEL || 'gemini-2.0-flash',
   ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK:
-    process.env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK !== 'false', // Default true in dev/testing; set false in prod
+    process.env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK !== undefined
+      ? process.env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK === 'true'
+      : process.env.NODE_ENV !== 'production',
 };
 
-// Validate critical Phase 1 environment variables
+// Validate critical environment variables
 if (!env.JWT_SECRET) {
   console.warn('⚠️ WARNING: JWT_SECRET is not explicitly defined in .env. Using fallback key.');
 }
