@@ -17,15 +17,15 @@ const isValidKeyFormat =
 if (isValidKeyFormat) {
   try {
     genAIClient = new GoogleGenAI({ apiKey: rawKey });
-    logger.info(`✅ Google Gen AI SDK initialized for LLM Generation with model: ${env.LLM_MODEL}.`);
+    logger.info(`[MODE] 🟢 REAL GEMINI LLM SYNTHESIZER ACTIVE (Model: ${env.LLM_MODEL}).`);
   } catch (err: any) {
     logger.warn('Failed to initialize Google Gen AI SDK for LLM:', err.message);
   }
 } else {
   if (env.ENABLE_DETERMINISTIC_EMBEDDING_FALLBACK) {
-    logger.info('ℹ️ Live GEMINI_API_KEY not supplied for LLM. Utilizing grounded local response synthesizer for dev/testing.');
+    logger.info('[MODE] 🟡 EXPLICIT LOCAL FALLBACK MODE: Live GEMINI_API_KEY not supplied for LLM. Utilizing grounded local response synthesizer for dev/testing.');
   } else {
-    logger.warn('⚠️ Live GEMINI_API_KEY missing or invalid in production configuration for LLM.');
+    logger.warn('[MODE] ⚠️ Live GEMINI_API_KEY missing or invalid in production configuration for LLM.');
   }
 }
 

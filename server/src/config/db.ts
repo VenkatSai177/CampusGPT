@@ -3,11 +3,25 @@ import { env } from './env';
 
 let supabaseClient: SupabaseClient | null = null;
 
-if (env.SUPABASE_URL && env.SUPABASE_ANON_KEY && !env.SUPABASE_URL.includes('your-supabase-project-ref')) {
-  supabaseClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY);
-  console.log('✅ Supabase client initialized.');
+const url = env.SUPABASE_URL ? env.SUPABASE_URL.trim() : '';
+const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY ? (env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY).trim() : '';
+
+const isValidSupabaseConfig =
+  url.length > 10 &&
+  url.startsWith('https://') &&
+  !url.includes('your-supabase-project-ref') &&
+  key.length > 20 &&
+  !key.includes('your_supabase_');
+
+if (isValidSupabaseConfig) {
+  try {
+    supabaseClient = createClient(url, key);
+    console.log(`[MODE] 🟢 REAL SUPABASE DATABASE ACTIVE (URL: ${url})`);
+  } catch (err: any) {
+    console.warn(`[MODE] ⚠️ Failed to initialize Supabase client: ${err.message}. Switching to fallback.`);
+  }
 } else {
-  console.log('ℹ️ Supabase credentials not provided or placeholder used. Utilizing in-memory mock repository for local development.');
+  console.log('[MODE] 🟡 EXPLICIT LOCAL FALLBACK MODE: Supabase credentials not provided in .env. Utilizing in-memory repository for local development.');
 }
 
 export { supabaseClient };
